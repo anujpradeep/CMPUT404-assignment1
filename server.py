@@ -1,90 +1,102 @@
-#  coding: utf-8 
-import os
-import socketserver
-
-# Copyright 2013 Abram Hindle, Eddie Antonio Santos
-# 
+# Copyright 2023 Anuj Pradeep
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-#
-# Furthermore it is derived from the Python documentation examples thus
-# some of the code is Copyright © 2001-2013 Python Software
-# Foundation; All Rights Reserved
-#
-# http://docs.python.org/2/library/socketserver.html
-#
-# run: python freetests.py
 
-# try: curl -v -X GET http://127.0.0.1:8080/
+import os
+import socketserver
+import socket
+
+ERROR_301_CONTENT = """
+		<!DOCTYPE html>
+		<html>
+			<head>
+				<title>301 Moved Permanently</title>
+			</head>
+			<body>
+				<h1>This page has been moved.</h1>
+				<p>The requested resource has been permanently moved to a new location.follow this link to the new location:</p>
+				<a href="{}">{}</a>
+			</body>
+		</html>
+		"""
+
+ERROR_400_CONTENT = """
+			<!DOCTYPE html>
+			<html>
+				<head>
+					<title>400 Bad Request</title>
+				</head>
+				<body>
+					<h1>400 Bad Request</h1>
+					<p>The request sent by the client was malformed or invalid.</p>
+				</body>
+			</html>
+		""".encode()
+
+ERROR_404_CONTENT = """
+		<!DOCTYPE html>
+		<html>
+			<head>
+				<title>404 Not Found</title>
+			</head>
+			<body>
+				<h1>404 Not Found</h1>
+				<p>The requested resource could not be found on the server.</p>
+			</body>
+		</html>
+		""".encode()
+
+ERROR_405_CONTENT = """
+		<!DOCTYPE html>
+		<html>
+			<head>
+				<title>405 Method Not Allowed</title>
+			</head>
+			<body>
+				<h1>405 Method Not Allowed</h1>
+				<p>The requested method is not allowed.</p>
+			</body>
+		</html>
+		""".encode()
 
 
 class MyWebServer(socketserver.BaseRequestHandler):
-	
-	error404 = f"404 Page Not Found. The requested resource could not be found on the server.\r\n\r\n".encode()
-	error405 = f"405 Method Not Allowed. The request type is not supported\r\n\r\n".encode()
-
+	'''
+		Is a function for socketserver, it handles the requests
+	'''
 	def handle(self):
+		
 		self.data = self.request.recv(1024).strip()
 		request_lines: list[str] = self.data.decode("utf-8").split("\r\n")
 
-		print(request_lines)
+		# print(request_lines)
 		
 		# requests might be an empty, but the length will be 1
 		if len(request_lines) > 1:
 			request_type, path, _ = request_lines[0].split(" ")
+			_, self.host = request_lines[1].split(" ")
 			if request_type == "GET":
 				self.handle_get_request(path)
 			else:
-				self.send_response(405, "Method Not Allowed", "text/html", self.error405)
+				self.send_response(405, "Method Not Allowed", "text/plain", ERROR_405_CONTENT)
 		else:
-			self.send_response(400, "Bad Request", "text/html", "")
-			
-	def send_response(self, status_code: int, status_message: str, content_type: str, content):
-		response = f"HTTP/1.1 {status_code} {status_message}\r\n"
-		response += "Content-Type: {}\r\n".format(content_type)
-		response += "\r\n"
-		self.request.sendall(response.encode())
-
-		# Sending the actual content
-		if (content != ""):
-			self.request.sendall(content)
-
-	def handle_file(self, file_path : str):
-		content_type : str
-		if file_path.endswith(".html"):
-			content_type = "text/html"
-		else:
-			content_type = "text/css"
+			# catch for if there is a bad response/request. I was getting a empty list (list['']) so I added the check and catch for it.
+			self.send_response(400, "Bad Request", "text/plain", ERROR_400_CONTENT)
 
 
-		# Read and send the file content
-		with open(file_path, "rb") as file:
-			content = file.read()
-		status_code = 200
-
-		return status_code, content_type, content
-	
-	# Function should be used when its a directory. It will return the status_code, content_type, content
-	# Will only return if said index.html exists inside the directory.
-	def get_index(self, file_path: str):
-		index_file_path = os.path.join(file_path.lstrip("/"), "index.html")
-
-		if os.path.exists(index_file_path) and os.path.isfile(index_file_path):
-			return self.handle_file(index_file_path)
-		else:
-			# sending 404 status code because the index.html file was not found.
-			return 404
-
+	'''
+		If the request we got is a GET request, this function will handle it, even if the path is valid or not
+	'''
 	def handle_get_request(self, path: str):
 		# Joins the path given from the request to www directory to create a file path
 		# The file path might or might not exist in ./www
@@ -112,17 +124,57 @@ class MyWebServer(socketserver.BaseRequestHandler):
 						if (status_code == 200):
 							self.send_response(status_code, "OK", content_type, content)
 						else:
-							self.send_response(404, "Not Found", "text/html", self.error404)
+							self.send_response(404, "Not Found", "text/html", ERROR_404_CONTENT)
 
 					# Path does not end with /, will have to redirect
 					else:
-						content = f"New Location is : {path + '/'}\r\n\r\n".encode()
+						content = ERROR_301_CONTENT.format(path + "/",self.host + path + "/").encode()
 						self.send_response(301, "Moved Permanently", "text/html", content)
 			else:
-				self.send_response(404, "Not Found", "text/html", self.error404)
+				self.send_response(404, "Not Found", "text/html", ERROR_404_CONTENT)
 		else:
 			# there is no file path that matches the requested file path inside ./www
-			self.send_response(403, "Not Found", "text/html", self.error404)
+			self.send_response(404, "Not Found", "text/html", ERROR_404_CONTENT)
+
+
+	'''
+		Function will send the response to the client, the HTTP Header and the body content. 
+	'''
+	def send_response(self, status_code: int, status_message: str, content_type: str, content):
+		header = f"HTTP/1.1 {status_code} {status_message}\r\nContent-Type: {content_type}\r\n\r\n".encode()
+		self.request.sendall(header)
+		self.request.sendall(content)
+
+	'''
+		This function will handle if the path is a file. will return the status code, content type and content
+		This function will only be called if its the path exists in www, therefor we dont have to check anything
+	'''
+	def handle_file(self, file_path : str):
+		content_type : str
+		if file_path.endswith(".html"):
+			content_type = "text/html"
+		else:
+			content_type = "text/css"
+
+
+		# Read and send the file content
+		with open(file_path, "rb") as file:
+			content = file.read()
+		status_code = 200
+
+		return status_code, content_type, content
+	'''
+		Function should be used when its a directory. It will return the status_code, content_type, content
+		Will only return if said index.html exists inside the directory.
+	'''
+	def get_index(self, file_path: str):
+		index_file_path = os.path.join(file_path.lstrip("/"), "index.html")
+
+		if os.path.exists(index_file_path) and os.path.isfile(index_file_path):
+			return self.handle_file(index_file_path)
+		else:
+			# sending 404 status code because the index.html file was not found.
+			return 404
 
 if __name__ == "__main__":
 	HOST, PORT = "localhost", 8080
