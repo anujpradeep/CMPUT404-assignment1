@@ -79,7 +79,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
 		self.data = self.request.recv(1024).strip()
 		request_lines: list[str] = self.data.decode("utf-8").split("\r\n")
 
-		# print(request_lines)
+		print(request_lines)
 		
 		# requests might be an empty, but the length will be 1
 		if len(request_lines) > 1:
@@ -147,7 +147,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
 
 	'''
 		This function will handle if the path is a file. will return the status code, content type and content
-		This function will only be called if its the path exists in www, therefor we dont have to check anything
+		This function will only be called if its the path exists in www, therefor we dont have to check if it exists here
 	'''
 	def handle_file(self, file_path : str):
 		content_type : str
